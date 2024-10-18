@@ -2,7 +2,7 @@ const winston = require("winston");
 const os = require("os");
 const fs = require("fs");
 
-const getLocalIPAddress = () => {
+const getLocalIpAddress = () => {
     const interfaces = os.networkInterfaces();
     for (const name in interfaces) {
         for (const net of interfaces[name]) {
@@ -14,11 +14,11 @@ const getLocalIPAddress = () => {
 }
 
 const serverOptions = {
-    host: getLocalIPAddress(),
+    host: getLocalIpAddress(),
     port: process.env.PORT || 5000,
     useHttps: true,
-    httpsCertFile: './cert.pem',
-    httpsKeyFile: './key.pem',
+    httpsCertFile: './cert/cert.pem',
+    httpsKeyFile: './cert/key.pem',
 }
 
 const sslOptions = {
@@ -35,4 +35,4 @@ const logger = winston.createLogger({
     ]
 });
 
-module.exports = { sslOptions, serverOptions, logger, getLocalIPAddress }
+module.exports = { sslOptions, serverOptions, logger, getLocalIPAddress: getLocalIpAddress }

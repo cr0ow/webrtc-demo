@@ -1,15 +1,14 @@
 import {useEffect, useState} from 'react';
 import Video from './Video.jsx';
 import DisplayName from './DisplayName.jsx';
+import PropTypes from 'prop-types';
 
 
-export default function VideoChat() {
+export default function VideoChat({connection, setConnection, localUUID, setLocalUUID}) {
     const [username, setUsername] = useState('')
     const [isConnected, setIsConnected] = useState(false)
     const [remoteStreams, setRemoteStreams] = useState([])
     const [localStream, setLocalStream] = useState({})
-    const [connection, setConnection] = useState(null)
-    const [localUUID, setLocalUUID] = useState(null)
     const [consumers, setConsumers] = useState(new Map())
     const [clients, setClients] = useState(new Map())
 
@@ -49,6 +48,7 @@ export default function VideoChat() {
                 removeUser(message);
                 break;
             case 'peers':
+                console.log("peers", localUUID)
                 await handlePeers(message);
                 break;
             case 'consume':
@@ -82,12 +82,9 @@ export default function VideoChat() {
     };
 
     const handleNewProducer = async ({ id, username }) => {
-        console.log("localUUID: " + localUUID)
         if (id === localUUID) return;
 
         console.log('Consuming', id);
-        console.log('connection:')
-        console.log(connection)
         clients.set(id, { id, username });
         await consumeOnce({ id, username });
     };
@@ -253,4 +250,11 @@ export default function VideoChat() {
             </div>
         </div>
     );
+}
+
+VideoChat.propTypes = {
+    connection: PropTypes.object,
+    setConnection: PropTypes.func,
+    localUUID: PropTypes.string,
+    setLocalUUID: PropTypes.func
 }
