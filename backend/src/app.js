@@ -23,6 +23,7 @@ const webServerSocket = new WebSocketServer({ server: webServer });
 const broadcast = message => {
     webServerSocket.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
+            console.log(message)
             client.send(message);
         }
     });
@@ -52,7 +53,7 @@ webServerSocket.on('connection', socket => {
             case 'consume':
                 await socketOnConsume(socket, body)
                 break;
-            case 'consumer_ice':
+            case 'consumerIce':
                 socketOnConsumerIce(body)
                 break;
             default:

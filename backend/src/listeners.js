@@ -3,9 +3,21 @@ const { peers, consumers, createPeerConnection, handleTrackEvent} = require("./h
 const { logger } = require("./config")
 
 const socketOnClose = (socket, broadcast) => {
-    logger.log({level: "info", message: "Peer disconnected: " + socket.id})
-    peers.delete(socket.id)
-    consumers.delete(socket.id)
+    logger.log({level: "info", message: "Peer disconnected: " + socket})
+
+    for(let [key, value] of peers.entries()) {
+        if(value === socket) {
+            peers.delete(key)
+            break
+        }
+    }
+
+    for(let [key, value] of consumers.entries()) {
+        if(value === socket) {
+            consumers.delete(key)
+            break
+        }
+    }
 
     broadcast(JSON.stringify({
         type: 'userLeft',
@@ -23,11 +35,9 @@ const socketOnConnection = async (socket, body, broadcast) => {
     const answer = await peerConnection.createAnswer()
     await peerConnection.setLocalDescription(answer)
 
-    const payload = {
-        type: 'answer',
-        sdp: peerConnection.localDescription
-    }
+    const payload = peerConnection.localDescription
     socket.send(JSON.stringify(payload));
+    logger.log({level: "info", message: "Sent 'connect' response: " + JSON.stringify(payload)})
 }
 
 const socketOnGetPeers = (socket, body) => {
@@ -42,13 +52,13 @@ const socketOnGetPeers = (socket, body) => {
         }
     });
 
-    const peersPayload = {
+    const payload = {
         type: 'peers',
         peers: otherPeers
     }
-    let jsonPayload = JSON.stringify(peersPayload)
-    logger.log({level: "info", message: "Response payload: " + jsonPayload})
+    let jsonPayload = JSON.stringify(payload)
     socket.send(jsonPayload);
+    logger.log({level: "info", message: "Sent 'getPeers' response: " + JSON.stringify(payload)})
 }
 
 const socketOnIce = (socket, body) => {
@@ -84,6 +94,7 @@ const socketOnConsume = async (socket, body) => {
         }
 
         socket.send(JSON.stringify(payload))
+        logger.log({level: "info", message: "Sent 'consume' response: " + JSON.stringify(payload)})
     } catch (error) {
         logger.log({level: 'error', message: error})
     }

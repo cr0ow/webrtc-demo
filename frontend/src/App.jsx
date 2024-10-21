@@ -1,14 +1,13 @@
 import VideoChat from './components/VideoChat.jsx';
-import {useState} from "react";
+import { useRef } from "react";
 
 export default function App() {
-    const [connection, setConnection] = useState({})
-    const [localUUID, setLocalUUID] = useState(null)
+    const connection = useRef(new WebSocket('wss://192.168.0.126:5000'))
 
     return (
         <div>
-            <h1>Video Chat Application</h1>
-            <VideoChat connection={connection} setConnection={setConnection} localUUID={localUUID} setLocalUUID={setLocalUUID} />
+            <h1>WebRTC Demo</h1>
+            <VideoChat connection={connection.current} />
         </div>
     );
 };
