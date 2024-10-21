@@ -1,20 +1,19 @@
 const { RTCPeerConnection } = require("wrtc");
 
 const peers = new Map()
-const  consumers = new Map()
+const consumers = new Map()
 
 const handleTrackEvent = (e, peerId, broadcast) => {
-    if (e.streams && e.streams[0]) {
-        peers.get(peerId).stream = e.streams[0];
+    peers.get(peerId).stream = e.streams[0];
 
-        const payload = {
-            type: 'newProducer',
-            id: peerId,
-            username: peers.get(peerId).username
-        }
-
-        broadcast(JSON.stringify(payload));
+    console.log("event", peers.get(peerId).username)
+    const payload = {
+        type: 'userJoined',
+        id: peerId,
+        username: peers.get(peerId).username,
+        stream: peers.get(peerId).stream
     }
+    broadcast(JSON.stringify(payload));
 }
 
 const createPeerConnection = () => {

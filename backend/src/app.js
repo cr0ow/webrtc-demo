@@ -6,7 +6,7 @@ const { sslOptions, serverOptions, logger, getLocalIPAddress } = require("./conf
 const { peers } = require("./helpers")
 const {
     socketOnClose,
-    socketOnConnection,
+    socketOnConnect,
     socketOnConsume,
     socketOnConsumerIce,
     socketOnGetPeers,
@@ -23,7 +23,6 @@ const webServerSocket = new WebSocketServer({ server: webServer });
 const broadcast = message => {
     webServerSocket.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            console.log(message)
             client.send(message);
         }
     });
@@ -42,13 +41,13 @@ webServerSocket.on('connection', socket => {
         logger.log({ level: "debug", message: "Message payload: " + JSON.stringify(body) });
         switch (body.type) {
             case 'connect':
-                await socketOnConnection(socket, body, broadcast)
+                await socketOnConnect(socket, body, broadcast)
                 break
             case 'getPeers':
                 socketOnGetPeers(socket, body)
                 break;
             case 'ice':
-                socketOnIce(socket, body)
+                socketOnIce(body)
                 break;
             case 'consume':
                 await socketOnConsume(socket, body)

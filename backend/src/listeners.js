@@ -25,32 +25,36 @@ const socketOnClose = (socket, broadcast) => {
     }))
 }
 
-const socketOnConnection = async (socket, body, broadcast) => {
+const socketOnConnect = async (socket, body, broadcast) => {
     const peerConnection = createPeerConnection()
-    peers.get(body.uqid).username = body.username
-    peers.get(body.uqid).peer = peerConnection
-    peerConnection.ontrack = (e) => { handleTrackEvent(e, body.uqid, broadcast) }
-    const desc = new webrtc.RTCSessionDescription(body.sdp)
+    const { uqid, sdp, username } = body
+
+    peerConnection.ontrack = (e) => handleTrackEvent(e, uqid, broadcast)
+
+    const desc = new webrtc.RTCSessionDescription(sdp)
     await peerConnection.setRemoteDescription(desc)
     const answer = await peerConnection.createAnswer()
     await peerConnection.setLocalDescription(answer)
 
+    peers.get(uqid).username = username
+    peers.get(uqid).peer = peerConnection
+
     const payload = peerConnection.localDescription
     socket.send(JSON.stringify(payload));
-    logger.log({level: "info", message: "Sent 'connect' response: " + JSON.stringify(payload)})
+    logger.log({level: "info", message: "Sent 'connect' response type: 'answer', payload truncated"})
 }
 
 const socketOnGetPeers = (socket, body) => {
     const otherPeers = [];
-    peers.forEach((peer, key) => {
+    for(let [key, value] of peers.entries()) {
         if (key !== body.uqid) {
             const peerInfo = {
                 id: key,
-                username: peer.username,
+                peer: value
             }
             otherPeers.push(peerInfo);
         }
-    });
+    }
 
     const payload = {
         type: 'peers',
@@ -61,7 +65,7 @@ const socketOnGetPeers = (socket, body) => {
     logger.log({level: "info", message: "Sent 'getPeers' response: " + JSON.stringify(payload)})
 }
 
-const socketOnIce = (socket, body) => {
+const socketOnIce = (body) => {
     const user = peers.get(body.uqid);
     if (user.peer) {
         user.peer
@@ -109,4 +113,4 @@ const socketOnConsumerIce = (body) => {
 }
 
 module.exports = { peers, consumers, socketOnConsumerIce, socketOnIce,
-    socketOnConsume, socketOnClose, socketOnGetPeers, socketOnConnection }
+    socketOnConsume, socketOnClose, socketOnGetPeers, socketOnConnect }

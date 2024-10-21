@@ -11,7 +11,12 @@ export default function Video({ id, stream }) {
         }
     }, [stream]);
 
-    return <video id={id} ref={videoRef} autoPlay muted />;
+    return <video
+        id={id}
+        ref={videoRef}
+        autoPlay
+        controls={false}
+    />;
 };
 
 Video.propTypes = {

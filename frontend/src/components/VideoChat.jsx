@@ -1,7 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import uuid from 'react-uuid';
 import Video from './Video.jsx';
-import DisplayName from './DisplayName.jsx';
 import PropTypes from 'prop-types';
 
 
@@ -9,8 +7,7 @@ export default function VideoChat({connection}) {
     const [username, setUsername] = useState('')
     const [isConnected, setIsConnected] = useState(false)
     const [remoteStreams, setRemoteStreams] = useState([])
-    const consumers = useRef(new Map())
-    const clients = useRef(new Map())
+    const remoteProducers = useRef(new Map())
     const localPeer = useRef(null)
     const localUUID = useRef(null)
     const localStream = useRef({})
@@ -30,8 +27,7 @@ export default function VideoChat({connection}) {
         setIsConnected(false)
         localStream.current.getTracks().forEach(track => track.stop());
         localStream.current = {}
-        clients.current.clear()
-        consumers.current.clear()
+        remoteProducers.current.clear()
     }
 
     const handleMessage = async ({ data }) => {
@@ -40,9 +36,10 @@ export default function VideoChat({connection}) {
         switch (message.type) {
             case 'welcome':
                 localUUID.current = message.id
+                console.log("id: ", localUUID.current)
                 break;
-            case 'newProducer':
-                await handleNewProducer(message);
+            case 'userJoined':
+                await handleUserJoined(message);
                 break;
             case 'userLeft':
                 removeUser(message);
@@ -63,6 +60,7 @@ export default function VideoChat({connection}) {
         const offer = await localPeer.current.createOffer();
         await localPeer.current.setLocalDescription(offer);
 
+        console.log("user: ", username)
         connection.send(JSON.stringify({
             type: 'connect',
             sdp: localPeer.current.localDescription,
@@ -72,37 +70,36 @@ export default function VideoChat({connection}) {
     }
 
     const handlePeers = async ({ peers }) => {
-        if (peers.length > 0) {
-            peers.forEach(peer => {
-                clients.current.set(peer.id, peer);
-                consumeOnce(peer);
-            });
+        for (const peer of peers) {
+            remoteProducers.current.set(peer.id, peer.peer)
         }
     };
 
-    const handleNewProducer = async ({ id, username }) => {
-        if (id === localUUID.current) return;
-
-        console.log('Consuming', id);
-        clients.current.set(id, { id, username });
-        await consumeOnce({ id, username });
+    const handleUserJoined = async ({ id, username, stream }) => {
+        if (id !== localUUID.current) {
+            console.log('User joined: ', id);
+            remoteProducers.current.set(id, {id, username, stream });
+            console.log(remoteProducers.current.get(id))
+            setRemoteStreams(prevItems => [...prevItems, createVideoElement(id, username, stream)])
+            await consumeOnce(id, username)
+        }
     };
 
     const removeUser = ({ id }) => {
-        const { consumerId } = clients.current.get(id);
-        consumers.current.delete(consumerId);
-        clients.current.delete(id);
-        const videoElement = document.getElementById(`remote_${consumerId}`);
+        remoteProducers.current.delete(id);
+        const videoElement = document.getElementById(`remote_${id}`);
         if (videoElement) {
             videoElement.srcObject.getTracks().forEach(track => track.stop());
         }
-        const userElement = document.getElementById(`user_${consumerId}`);
-        if (userElement) userElement.remove();
+        const userElement = document.getElementById(`user_${id}`);
+        if (userElement) {
+            userElement.remove();
+        }
     };
 
     const handleConsume = ({ sdp, consumerId }) => {
         const desc = new RTCSessionDescription(sdp);
-        consumers.current.get(consumerId).setRemoteDescription(desc).catch(console.error);
+        remoteProducers.current.get(consumerId).setRemoteDescription(desc).catch(console.error);
     };
 
     const handleAnswer = (sdp) => {
@@ -114,20 +111,31 @@ export default function VideoChat({connection}) {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         localStream.current = stream
 
-        const videoElement = createVideoElement(username, stream)
-        setRemoteStreams(prevItems => [...prevItems, videoElement])
+        let peerConnection = createPeer()
+        peerConnection.ontrack = handleTrackEvent
 
-        localPeer.current = createPeer()
-        localStream.current.getTracks().forEach(track => localPeer.current.addTrack(track, stream))
-        await subscribe()
+        stream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, stream)
+        })
+        const video = createVideoElement(localUUID.current, username, stream)
+        setRemoteStreams(prevItems => [...prevItems, video])
+        localPeer.current = peerConnection
+
+        await consumeAll()
     };
+
+    const handleTrackEvent = (e) => {
+        for(let [key, value] in remoteProducers.current.entries()) {
+            if(value === e.target) {
+                // const videoElement = createVideoElement(key, value.username, e.streams[0])
+                // setRemoteStreams(prevItems => [...prevItems, videoElement])
+                break
+            }
+        }
+    }
 
     const disconnect = () => {
         connection.close(1000, 'User disconnected manually')
-    }
-
-    async function subscribe() {
-        await consumeAll()
     }
 
     async function consumeAll() {
@@ -135,7 +143,6 @@ export default function VideoChat({connection}) {
             type: 'getPeers',
             uqid: localUUID.current
         }
-
         connection.send(JSON.stringify(payload));
     }
 
@@ -153,38 +160,38 @@ export default function VideoChat({connection}) {
 
     const handleIceCandidate = ({ candidate }) => {
         if (candidate && candidate.candidate) {
-            connection.send(JSON.stringify({ type: 'ice', ice: candidate, uqid: localUUID.current }));
+            connection.send(JSON.stringify({ type: 'ice', ice: candidate, uqid: localUUID.current }))
         }
     };
 
-    const consumeOnce = async (peer) => {
-        const consumerId = uuid();
-        console.log("consumerId: ", consumerId)
-        const consumerTransport = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.stunprotocol.org:3478' },
-                { urls: 'stun:stun.l.google.com:19302' },
-            ],
-        });
+    const consumeOnce = async (id, username) => {
+        console.log("consumerId: ", id)
+        console.log("username: ", username)
 
-        consumers.current.set(consumerId, consumerTransport);
-        consumerTransport.onicecandidate = (e) => handleConsumerIceCandidate(e, peer.id, consumerId);
-        consumerTransport.ontrack = (e) => handleRemoteTrack(e.streams[0], peer.username);
-        const offer = await consumerTransport.createOffer();
-        await consumerTransport.setLocalDescription(offer);
+        const remotePeerConnection = createPeer()
+        remotePeerConnection.onicecandidate = (e) => handleRemoteIceCandidate(e, id)
+        remotePeerConnection.ontrack = (e) => handleRemoteTrack(e.streams[0], username)
+
+        const offer = await remotePeerConnection.createOffer()
+        await remotePeerConnection.setLocalDescription(offer)
+        remoteProducers.current.set(id, remotePeerConnection)
 
         connection.send(JSON.stringify({
             type: 'consume',
-            uqid: peer.id,
-            consumerId: consumerId,
-            sdp: consumerTransport.localDescription,
+            uqid: localUUID.current,
+            consumerId: id,
+            sdp: remotePeerConnection.localDescription,
         }));
     };
 
-    const handleConsumerIceCandidate = (e, id, consumerId) => {
+    const handleRemoteIceCandidate = (e, consumerId) => {
         const { candidate } = e;
         if (candidate && candidate.candidate) {
-            connection.send(JSON.stringify({ type: 'consumerIce', ice: candidate, uqid: id, consumerId }));
+            connection.send(JSON.stringify({
+                type: 'consumerIce',
+                ice: candidate,
+                uqid: localUUID.current,
+                consumerId: consumerId }));
         }
     };
 
@@ -214,9 +221,9 @@ export default function VideoChat({connection}) {
         document.querySelector('.videos-inner').appendChild(div);
     }
 
-    const createVideoElement = (username, stream) => {
+    const createVideoElement = (id, username, stream) => {
         return {
-            id: `remote_${uuid()}`,
+            id: `remote_${id}`,
             stream,
             username,
         };
@@ -236,8 +243,8 @@ export default function VideoChat({connection}) {
                 <div className="videos-inner">
                     {remoteStreams.map(video => (
                         <div key={video.id} id={`user_${video.id}`} className="videoWrap">
-                            <DisplayName username={video.username} />
-                            <Video id={video.id} stream={video.stream} />
+                            <div className="display_name">{video.username}</div>
+                            <Video id={video.id} stream={video.stream}/>
                         </div>
                     ))}
                 </div>
