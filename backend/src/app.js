@@ -7,8 +7,8 @@ const { peers } = require("./helpers")
 const {
     socketOnClose,
     socketOnConnect,
-    socketOnConsume,
-    socketOnConsumerIce,
+    socketOnSubscribe,
+    socketOnProducerIce,
     socketOnGetPeers,
     socketOnIce
 } = require("./listeners")
@@ -21,24 +21,22 @@ webServer.listen(serverOptions)
 const webServerSocket = new WebSocketServer({ server: webServer });
 
 const broadcast = message => {
-    webServerSocket.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
+    peers.forEach(peer => {
+        if (peer.socket.readyState === WebSocket.OPEN) {
+            peer.socket.send(message);
         }
     });
 }
 
 webServerSocket.on('connection', socket => {
-    let peerId = uuid4();
-    logger.log({level: "info", message: "New client connected: " + peerId});
-    peers.set(peerId, { socket: socket, id: peerId })
-    socket.on('close', socket => socketOnClose(socket, broadcast));
-    socket.send(JSON.stringify({ 'type': 'welcome', id: peerId }));
+    socket.id = uuid4()
+    logger.log({level: "info", message: "New client connected: " + socket.id})
+    peers.set(socket.id, { socket: socket, id: socket.id })
+    socket.on('close', () => socketOnClose(socket.id, broadcast));
+    socket.send(JSON.stringify({ 'type': 'welcome', id: socket.id }))
 
     socket.on('message', async (message) => {
-        const body = JSON.parse(message);
-        logger.log({ level: "info", message: "Received message: '" + body.type + "' from: '" + body.uqid + "'" });
-        logger.log({ level: "debug", message: "Message payload: " + JSON.stringify(body) });
+        const body = JSON.parse(message)
         switch (body.type) {
             case 'connect':
                 await socketOnConnect(socket, body, broadcast)
@@ -49,21 +47,20 @@ webServerSocket.on('connection', socket => {
             case 'ice':
                 socketOnIce(body)
                 break;
-            case 'consume':
-                await socketOnConsume(socket, body)
+            case 'subscribe':
+                await socketOnSubscribe(socket, body)
                 break;
-            case 'consumerIce':
-                socketOnConsumerIce(body)
+            case 'producerIce':
+                socketOnProducerIce(body)
                 break;
             default:
-                broadcast(message);
-
+                broadcast(message)
         }
     });
 
-    socket.on('error', () => socket.terminate());
+    socket.on('error', () => socket.terminate())
 });
 
-logger.log({level: "info", message: "Server started"});
-logger.log({level: "info", message: `Local:   https://localhost:${serverOptions.port}`});
-logger.log({level: "info", message: `Network: https://${getLocalIPAddress()}:${serverOptions.port}`});
+logger.log({level: "info", message: "Server started"})
+logger.log({level: "info", message: `Local:   https://localhost:${serverOptions.port}`})
+logger.log({level: "info", message: `Network: https://${getLocalIPAddress()}:${serverOptions.port}`})

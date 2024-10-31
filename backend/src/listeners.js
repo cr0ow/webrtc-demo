@@ -1,56 +1,46 @@
 const webrtc = require("wrtc")
-const { peers, consumers, createPeerConnection, handleTrackEvent} = require("./helpers")
+const { peers, producers, createPeerConnection, handleTrackEvent} = require("./helpers")
 const { logger } = require("./config")
+const { v4: uuid4 } = require('uuid')
 
-const socketOnClose = (socket, broadcast) => {
-    logger.log({level: "info", message: "Peer disconnected: " + socket})
+const socketOnClose = (socketId, broadcast) => {
+    logger.log({ level: "info", message: "Peer disconnected: " + socketId })
 
-    for(let [key, value] of peers.entries()) {
-        if(value === socket) {
-            peers.delete(key)
-            break
-        }
-    }
-
-    for(let [key, value] of consumers.entries()) {
-        if(value === socket) {
-            consumers.delete(key)
-            break
-        }
-    }
+    peers.delete(socketId)
+    producers.delete(socketId)
 
     broadcast(JSON.stringify({
         type: 'userLeft',
-        id: socket.id
+        id: socketId
     }))
 }
 
 const socketOnConnect = async (socket, body, broadcast) => {
     const peerConnection = createPeerConnection()
-    const { uqid, sdp, username } = body
+    const { id, sdp, username } = body
 
-    peerConnection.ontrack = (e) => handleTrackEvent(e, uqid, broadcast)
+    peerConnection.ontrack = (e) => handleTrackEvent(e, id, broadcast)
 
     const desc = new webrtc.RTCSessionDescription(sdp)
     await peerConnection.setRemoteDescription(desc)
     const answer = await peerConnection.createAnswer()
     await peerConnection.setLocalDescription(answer)
 
-    peers.get(uqid).username = username
-    peers.get(uqid).peer = peerConnection
+    peers.get(id).username = username
+    peers.get(id).peer = peerConnection
 
     const payload = peerConnection.localDescription
     socket.send(JSON.stringify(payload));
-    logger.log({level: "info", message: "Sent 'connect' response type: 'answer', payload truncated"})
+    logger.log({ level: "info", message: "Sent response to 'connect' event, emitted_event_type = 'answer', payload hidden" })
 }
 
 const socketOnGetPeers = (socket, body) => {
     const otherPeers = [];
-    for(let [key, value] of peers.entries()) {
-        if (key !== body.uqid) {
+    for(let [peerId, peer] of peers.entries()) {
+        if (peerId !== body.id) {
             const peerInfo = {
-                id: key,
-                peer: value
+                id: peerId,
+                username: peer.username
             }
             otherPeers.push(peerInfo);
         }
@@ -62,55 +52,55 @@ const socketOnGetPeers = (socket, body) => {
     }
     let jsonPayload = JSON.stringify(payload)
     socket.send(jsonPayload);
-    logger.log({level: "info", message: "Sent 'getPeers' response: " + JSON.stringify(payload)})
+    logger.log({ level: "info", message: "Sent response to 'getPeers' event, emitted_event_type = 'peers', payload = " + jsonPayload })
 }
 
 const socketOnIce = (body) => {
-    const user = peers.get(body.uqid);
+    const user = peers.get(body.id)
     if (user.peer) {
-        user.peer
-            .addIceCandidate(new webrtc.RTCIceCandidate(body.ice))
-            .catch(e => logger.log({level: 'error', message: e}));
+        user.peer.addIceCandidate(new webrtc.RTCIceCandidate(body.ice))
+            .catch(error => logger.log({ level: 'error', message: error }))
     }
 }
 
-const socketOnConsume = async (socket, body) => {
+const socketOnSubscribe = async (socket, body) => {
     try {
-        let { id, sdp, consumerId } = body
-        const remoteUser = peers.get(id)
+        const remoteUser = peers.get(body.id)
         const newPeer = createPeerConnection()
-        consumers.set(consumerId, newPeer)
-        const desc = new webrtc.RTCSessionDescription(sdp)
-        await consumers.get(consumerId).setRemoteDescription(desc)
+        producers.set(body.producerId, newPeer)
+        const desc = new webrtc.RTCSessionDescription(body.sdp)
+        await producers.get(body.producerId).setRemoteDescription(desc)
 
         remoteUser.stream.getTracks().forEach(track => {
-            consumers.get(consumerId).addTrack(track, remoteUser.stream)
+            producers.get(body.producerId).addTrack(track, remoteUser.stream)
         })
-        const answer = await consumers.get(consumerId).createAnswer()
-        await consumers.get(consumerId).setLocalDescription(answer)
+
+        const answer = await producers.get(body.producerId).createAnswer()
+        await producers.get(body.producerId).setLocalDescription(answer)
 
         const payload = {
-            type: 'consume',
-            sdp: consumers.get(consumerId).localDescription,
+            type: 'subscribed',
+            sdp: producers.get(body.producerId).localDescription,
             username: remoteUser.username,
-            id,
-            consumerId
+            id: body.id,
+            producerId: body.producerId
         }
 
-        socket.send(JSON.stringify(payload))
-        logger.log({level: "info", message: "Sent 'consume' response: " + JSON.stringify(payload)})
+        const jsonPayload = JSON.stringify(payload)
+        socket.send(jsonPayload)
+        logger.log({ level: "info", message: "Sent response to 'subscribe' event, emitted_event_type = 'subscribed', payload = " + jsonPayload })
     } catch (error) {
-        logger.log({level: 'error', message: error})
+        logger.log({ level: 'error', message: error })
     }
 }
 
-const socketOnConsumerIce = (body) => {
-    if (consumers.has(body.consumerId)) {
-        consumers.get(body.consumerId)
+const socketOnProducerIce = (body) => {
+    if (producers.has(body.producerId)) {
+        producers.get(body.producerId)
             .addIceCandidate(new webrtc.RTCIceCandidate(body.ice))
-            .catch(error => logger.log({level: 'error', message: error}))
+            .catch(error => logger.log({ level: 'error', message: error }))
     }
 }
 
-module.exports = { peers, consumers, socketOnConsumerIce, socketOnIce,
-    socketOnConsume, socketOnClose, socketOnGetPeers, socketOnConnect }
+module.exports = { peers, producers, socketOnProducerIce, socketOnIce,
+    socketOnSubscribe, socketOnClose, socketOnGetPeers, socketOnConnect }
