@@ -1,21 +1,26 @@
-import { useEffect, useRef } from 'react';
-import PropTypes from "prop-types";
+import { useEffect, useRef } from 'react'
+import PropTypes from "prop-types"
 
 export default function Video({ id, stream }) {
-    const videoRef = useRef(null);
+    const videoRef = useRef(null)
 
     useEffect(() => {
-        videoRef.current.srcObject = stream
-        videoRef.current.play()
-    }, [stream]);
+        const handlePlay = () => {
+            videoRef.current.srcObject = stream
+            videoRef.current.autoplay = true
+            videoRef.current.controls = false
+            videoRef.current.play()
+        }
+        //
+        // document.addEventListener('click', handlePlay, { once: true })
+        //
+        // return () => document.removeEventListener('click', handlePlay)
 
-    return <video
-        id={id}
-        ref={videoRef}
-        autoPlay
-        controls={false}
-    />;
-};
+        handlePlay()
+    }, [stream])
+
+    return <video id={id} ref={videoRef}/>
+}
 
 Video.propTypes = {
     id: PropTypes.string,

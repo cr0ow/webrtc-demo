@@ -1,13 +1,13 @@
-const winston = require("winston");
-const os = require("os");
-const fs = require("fs");
+const winston = require("winston")
+const os = require("os")
+const fs = require("fs")
 
 const getLocalIpAddress = () => {
-    const interfaces = os.networkInterfaces();
+    const interfaces = os.networkInterfaces()
     for (const name in interfaces) {
         for (const net of interfaces[name]) {
             if (net.family === 'IPv4' && !net.internal) {
-                return net.address;
+                return net.address
             }
         }
     }
@@ -28,11 +28,15 @@ const sslOptions = {
 
 const logger = winston.createLogger({
     level: 'info',
-    format: winston.format.cli(),
+    format: winston.format.combine(
+        winston.format.errors({stack: true}),
+        winston.format.colorize(),
+        winston.format.prettyPrint()
+    ),
     defaultMeta: { service: 'nest-calls' },
     transports: [
         new winston.transports.Console()
     ]
-});
+})
 
-module.exports = { sslOptions, serverOptions, logger, getLocalIPAddress: getLocalIpAddress }
+module.exports = { sslOptions, serverOptions, logger, getLocalIpAddress }
