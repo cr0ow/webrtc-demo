@@ -14,11 +14,11 @@ const getLocalIpAddress = () => {
 }
 
 const serverOptions = {
-    host: getLocalIpAddress(),
+    host: '127.0.0.1',
     port: process.env.PORT || 5000,
     useHttps: true,
     httpsCertFile: './cert/cert.pem',
-    httpsKeyFile: './cert/key.pem',
+    httpsKeyFile: './cert/cert-key.pem',
 }
 
 const sslOptions = {
@@ -28,11 +28,7 @@ const sslOptions = {
 
 const logger = winston.createLogger({
     level: 'info',
-    format: winston.format.combine(
-        winston.format.errors({stack: true}),
-        winston.format.colorize(),
-        winston.format.prettyPrint()
-    ),
+    format: winston.format.cli(),
     defaultMeta: { service: 'nest-calls' },
     transports: [
         new winston.transports.Console()

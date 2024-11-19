@@ -1,7 +1,7 @@
 const { v4: uuid4 } = require('uuid')
 const https = require('https')
 const WebSocket = require('ws')
-const express = require('express')
+
 const { sslOptions, serverOptions, logger, getLocalIpAddress } = require("./config")
 const { peers } = require("./utils")
 const {
@@ -12,12 +12,22 @@ const {
     socketOnGetPeers,
     socketOnIce
 } = require("./listeners")
-
+const express = require("express")
+const cors = require("cors")
 
 const app = express()
+app.use(cors({
+    origin: 'https://localhost:5173',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+}))
 const WebSocketServer = WebSocket.Server
 const webServer = https.createServer(sslOptions, app)
-webServer.listen(serverOptions)
+webServer.listen(serverOptions, () => {
+    const addressInfo = webServer.address();
+    logger.log({level: "info", message: `Sockets:   wss://${addressInfo.address}:${addressInfo.port}`})
+})
 const webServerSocket = new WebSocketServer({ server: webServer })
 
 const broadcast = message => {
@@ -37,8 +47,6 @@ webServerSocket.on('connection', socket => {
 
     socket.on('message', async (message) => {
         const body = JSON.parse(message)
-        // const id = body.id || body.consumerId
-        // console.log(body.type + " from " + id)
         switch (body.type) {
             case 'connect':
                 await socketOnConnect(socket, body, broadcast)
@@ -62,6 +70,10 @@ webServerSocket.on('connection', socket => {
 
     socket.on('error', () => socket.terminate())
 })
+
+webServerSocket.on('error', (error) => {
+    console.error(`WebSocket error: ${error.message}`);
+});
 
 logger.log({level: "info", message: "Server started"})
 logger.log({level: "info", message: `Localhost: https://localhost:${serverOptions.port}`})

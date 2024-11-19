@@ -202,14 +202,27 @@ export default function VideoChat({connection}) {
     }
 
     function handleRemoteTrack(stream, producerId) {
-        if(remotePeers.current.get(producerId).stream) {
-            stream.getTracks().forEach(track => {
-                if(!remotePeers.current.get(producerId).stream.getTracks().includes(track)) {
-                    remotePeers.current.get(producerId).stream.addTrack(track)
-                }
-            })
-        } else {
-            remotePeers.current.get(producerId).stream = stream
+        // if(remotePeers.current.get(producerId).stream) {
+        //     stream.getTracks().forEach(track => {
+        //         if(!remotePeers.current.get(producerId).stream.getTracks().includes(track)) {
+        //             remotePeers.current.get(producerId).stream.addTrack(track)
+        //         }
+        //     })
+        // } else {
+        //     remotePeers.current.get(producerId).stream = stream
+        // }
+        const userVideo = document.getElementById(producerId)
+        if(userVideo) {
+            const tracks = userVideo.srcObject.getTracks()
+            const track = stream.getTracks()[0]
+            if (!tracks.includes(track)) {
+                userVideo.srcObject.addTrack(track)
+            }
+        }
+        else {
+            const video = document.createElement("video")
+            video.srcObject = stream
+            video.id = producerId
         }
         reload()
     }
@@ -233,7 +246,7 @@ export default function VideoChat({connection}) {
                     {Array.from(remotePeers.current.entries()).map(([id, peer]) => (
                         <div key={id} id={`user_${peer.username}`} className="videoWrap">
                             <div className="display_name">{peer.username}</div>
-                            <Video id={`remote_${peer.username}`} stream={peer.stream}/>
+                            <Video id={id}/>
                         </div>
                     ))}
                 </div>

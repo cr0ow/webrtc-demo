@@ -1,25 +1,22 @@
-import { useEffect, useRef } from 'react'
+import {useEffect, useState} from 'react'
 import PropTypes from "prop-types"
 
-export default function Video({ id, stream }) {
-    const videoRef = useRef(null)
+export default function Video({ id }) {
+    const [mediaStream, setMediaStream] = useState(null)
 
     useEffect(() => {
-        const handlePlay = () => {
-            videoRef.current.srcObject = stream
-            videoRef.current.autoplay = true
-            videoRef.current.controls = false
-            videoRef.current.play()
+        const stream = document.getElementById(id).srcObject
+        if(stream) {
+            setMediaStream(stream)
         }
-        //
-        // document.addEventListener('click', handlePlay, { once: true })
-        //
-        // return () => document.removeEventListener('click', handlePlay)
+    }, [])
 
-        handlePlay()
-    }, [stream])
-
-    return <video id={id} ref={videoRef}/>
+    return <video id={`VIDEO_${id}`}
+                  ref={mediaStream}
+                  autoPlay={true}
+                  playsInline={true}
+                  controls={false}
+    />
 }
 
 Video.propTypes = {
