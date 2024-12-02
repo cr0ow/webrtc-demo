@@ -1,9 +1,52 @@
 const webrtc = require("wrtc")
-const { peers, createPeerConnection, handleTrackEvent} = require("./utils")
 const { logger } = require("./config")
+const WebSocket = require("ws");
+const {RTCPeerConnection} = require("wrtc");
+const {v4: uuid4} = require("uuid");
 
+/*
+    peer {
+        id: string,
+        username: string,
+        socket: WebSocket,
+        connection: RTCPeerConnection,
+        stream: MediaStream,
+        subscribedPeers: Map<id, RTCPeerConnection>
+    }
+*/
+const peers = new Map()
 
-const socketOnClose = (socketId, broadcast) => {
+const socketOnMessage = async (socket, message) => {
+    const body = JSON.parse(message)
+    switch (body.type) {
+        case 'joinRoom':
+            await socketOnJoinRoom(socket, body)
+            break
+        case 'getPeers':
+            socketOnGetPeers(socket, body)
+            break
+        case 'ice':
+            socketOnIce(body)
+            break
+        case 'subscribe':
+            await socketOnSubscribe(socket, body)
+            break
+        case 'producerIce':
+            socketOnProducerIce(body.ice, body.consumerId, body.producerId)
+            break
+        default:
+            broadcast(message)
+    }
+}
+
+const socketOnConnect = (socket) => {
+    socket.id = uuid4()
+    logger.log({level: "info", message: "New client connected: " + socket.id})
+    peers.set(socket.id, { socket: socket, id: socket.id, subscribedPeers: new Map() })
+    socket.send(JSON.stringify({ 'type': 'joinedRoom', id: socket.id }))
+}
+
+const socketOnClose = (socketId) => {
     logger.log({ level: "info", message: "Peer disconnected: " + socketId })
 
     peers.delete(socketId)
@@ -14,7 +57,7 @@ const socketOnClose = (socketId, broadcast) => {
     }))
 }
 
-const socketOnConnect = async (socket, body, broadcast) => {
+const socketOnJoinRoom = async (socket, body) => {
     const peerConnection = createPeerConnection()
     const { id, sdp, username } = body
 
@@ -113,5 +156,33 @@ const socketOnProducerIce = (ice, consumerId, producerId) => {
     }
 }
 
-module.exports = { peers, socketOnProducerIce, socketOnIce, socketOnSubscribe,
-    socketOnClose, socketOnGetPeers, socketOnConnect }
+const broadcast = message => {
+    peers.forEach(peer => {
+        if (peer.socket.readyState === WebSocket.OPEN) {
+            peer.socket.send(message)
+        }
+    })
+}
+
+const handleTrackEvent = (event, id, broadcast) => {
+    if (event.streams && event.streams[0]) {
+        peers.get(id).stream = event.streams[0]
+
+        const payload = {
+            type: 'newProducer',
+            producerId: id,
+            username: peers.get(id).username
+        }
+        broadcast(JSON.stringify(payload))
+    }
+}
+
+const createPeerConnection = () => {
+    return new RTCPeerConnection({
+        iceServers: [
+            {'urls': 'stun:stun.l.google.com:19302'}
+        ]
+    })
+}
+
+module.exports = { peers, socketOnConnect, socketOnClose, socketOnMessage }

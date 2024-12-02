@@ -40,7 +40,7 @@ export default function VideoChat({connection}) {
         const message = JSON.parse(data)
 
         switch (message.type) {
-            case 'welcome':
+            case 'joinedRoom':
                 connection.id = message.id
                 localId.current = message.id
                 break
@@ -67,7 +67,7 @@ export default function VideoChat({connection}) {
         await remotePeers.current.get(localId.current).connection.setLocalDescription(offer)
 
         connection.send(JSON.stringify({
-            type: 'connect',
+            type: 'joinRoom',
             sdp: remotePeers.current.get(localId.current).connection.localDescription,
             id: localId.current,
             username: localUsername
