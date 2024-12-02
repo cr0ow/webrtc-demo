@@ -15,7 +15,7 @@ const getLocalIpAddress = () => {
 
 const serverOptions = {
     host: '127.0.0.1',
-    port: process.env.PORT || 5000,
+    port: process.env.PORT || 8080,
     useHttps: true,
     httpsCertFile: './cert/cert.pem',
     httpsKeyFile: './cert/cert-key.pem',

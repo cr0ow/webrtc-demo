@@ -99,7 +99,8 @@ export default function VideoChat({connection}) {
     }
 
     const handleSubscribed = (sdp, producerUsername, producerId) => {
-        if(remotePeers.current.get(producerId).connection !== "stable") {
+        if(remotePeers.current.get(producerId).connection.connectionState !== "stable") {
+            console.log(remotePeers.current.get(producerId).connection.connectionState)
             const desc = new RTCSessionDescription(sdp)
             remotePeers.current.get(producerId).connection.setRemoteDescription(desc).catch(console.error)
             remotePeers.current.get(producerId).username = localUsername
@@ -123,6 +124,7 @@ export default function VideoChat({connection}) {
 
         await handleRemoteTrack(stream, localId.current)
         stream.getTracks().forEach(track => remotePeers.current.get(localId.current).connection.addTrack(track, stream))
+        setIsConnected(true)
         reload()
 
         const payload = {
@@ -202,27 +204,14 @@ export default function VideoChat({connection}) {
     }
 
     function handleRemoteTrack(stream, producerId) {
-        // if(remotePeers.current.get(producerId).stream) {
-        //     stream.getTracks().forEach(track => {
-        //         if(!remotePeers.current.get(producerId).stream.getTracks().includes(track)) {
-        //             remotePeers.current.get(producerId).stream.addTrack(track)
-        //         }
-        //     })
-        // } else {
-        //     remotePeers.current.get(producerId).stream = stream
-        // }
-        const userVideo = document.getElementById(producerId)
-        if(userVideo) {
-            const tracks = userVideo.srcObject.getTracks()
-            const track = stream.getTracks()[0]
-            if (!tracks.includes(track)) {
-                userVideo.srcObject.addTrack(track)
-            }
-        }
-        else {
-            const video = document.createElement("video")
-            video.srcObject = stream
-            video.id = producerId
+        if(remotePeers.current.get(producerId).stream) {
+            stream.getTracks().forEach(track => {
+                if(!remotePeers.current.get(producerId).stream.getTracks().includes(track)) {
+                    remotePeers.current.get(producerId).stream.addTrack(track)
+                }
+            })
+        } else {
+            remotePeers.current.get(producerId).stream = stream
         }
         reload()
     }
@@ -246,7 +235,7 @@ export default function VideoChat({connection}) {
                     {Array.from(remotePeers.current.entries()).map(([id, peer]) => (
                         <div key={id} id={`user_${peer.username}`} className="videoWrap">
                             <div className="display_name">{peer.username}</div>
-                            <Video id={id}/>
+                            <Video id={id} stream={peer.stream}/>
                         </div>
                     ))}
                 </div>

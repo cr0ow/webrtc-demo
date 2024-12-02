@@ -2,7 +2,8 @@ import VideoChat from './components/VideoChat.jsx';
 import { useRef } from "react";
 
 export default function App() {
-    const connection = useRef(new WebSocket("wss://127.0.0.1:5000"))
+    // const connection = useRef(new WebSocket("wss://127.0.0.1:8080"))
+    const connection = useRef(new WebSocket("wss://localhost:5173/ws"))
 
     return (
         <div>

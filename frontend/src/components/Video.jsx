@@ -1,15 +1,15 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef} from 'react'
 import PropTypes from "prop-types"
 
-export default function Video({ id }) {
-    const [mediaStream, setMediaStream] = useState(null)
+export default function Video({ id, stream }) {
+    const mediaStream = useRef(stream)
 
     useEffect(() => {
-        const stream = document.getElementById(id).srcObject
-        if(stream) {
-            setMediaStream(stream)
+        if (mediaStream.current) {
+            mediaStream.current.srcObject = stream
+            mediaStream.current.play()
         }
-    }, [])
+    }, [stream])
 
     return <video id={`VIDEO_${id}`}
                   ref={mediaStream}
