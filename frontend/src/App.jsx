@@ -1,5 +1,5 @@
-import VideoChat from './components/VideoChat.jsx';
-import { useRef } from "react";
+import VideoChat from './components/VideoChat.jsx'
+import { useRef } from "react"
 
 export default function App() {
     const connection = useRef(new WebSocket("wss://localhost:5173/ws"))

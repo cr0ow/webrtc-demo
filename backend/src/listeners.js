@@ -1,7 +1,6 @@
-const webrtc = require("wrtc")
 const { logger } = require("./config")
 const WebSocket = require("ws");
-const {RTCPeerConnection} = require("wrtc");
+const nodeDataChannel = require("node-datachannel")
 const {v4: uuid4} = require("uuid");
 
 /*
@@ -9,8 +8,7 @@ const {v4: uuid4} = require("uuid");
         id: string,
         username: string,
         socket: WebSocket,
-        connection: RTCPeerConnection,
-        stream: MediaStream,
+        connection: PeerConnection,
         subscribedPeers: Map<id, RTCPeerConnection>
     }
 */
@@ -19,24 +17,44 @@ const peers = new Map()
 const socketOnMessage = async (socket, message) => {
     const body = JSON.parse(message)
     switch (body.type) {
-        case 'joinRoom':
-            await socketOnJoinRoom(socket, body)
+        case 'offer':
+            socketOnOffer(socket, body)
             break
-        case 'getPeers':
-            socketOnGetPeers(socket, body)
+        case 'answer':
+            socketOnAnswer(body)
             break
-        case 'ice':
-            socketOnIce(body)
-            break
-        case 'subscribe':
-            await socketOnSubscribe(socket, body)
-            break
-        case 'producerIce':
-            socketOnProducerIce(body.ice, body.consumerId, body.producerId)
+        case 'candidate':
+            socketOnCandidate(body)
             break
         default:
-            broadcast(message)
+            break
     }
+}
+
+const socketOnOffer = (socket, body) => {
+    const { id, description, type } = body
+    let peerConnection = createPeerConnection(id)
+    peerConnection.onStateChange((state) => console.log('State: ', state))
+    peerConnection.onGatheringStateChange((state) => console.log('GatheringState: ', state))
+
+    peerConnection.onLocalDescription((description, type) => {
+        socket.send(JSON.stringify({ id, type, description }))
+    })
+    peerConnection.onLocalCandidate((candidate, mid) => {
+        socket.send(JSON.stringify({ id, type: 'candidate', candidate, mid }))
+    })
+    peerConnection.onDataChannel((dataChannel) => {
+        console.log('DataChannel from ' + id + ' received with label "', dataChannel.getLabel() + '"')
+        dataChannel.onMessage((msg) => console.log('Message from ' + id + ' received:', msg))
+        dataChannel.sendMessage('Hello From ' + id)
+    })
+
+    peers.get(id).connection = peerConnection;
+    peers.get(id).connection.setRemoteDescription(description, type)
+}
+
+const socketOnAnswer = (body) => {
+    peers.get(id).connection.setRemoteDescription(body.description, body.type)
 }
 
 const socketOnConnect = (socket) => {
@@ -58,22 +76,25 @@ const socketOnClose = (socketId) => {
 }
 
 const socketOnJoinRoom = async (socket, body) => {
-    const peerConnection = createPeerConnection()
     const { id, sdp, username } = body
+    const peerConnection = createPeerConnection(id)
+    const serverConnection = createPeerConnection(`${id}_server`)
 
     peers.get(id).username = username
-    peerConnection.ontrack = e => handleTrackEvent(e, id, broadcast)
 
-    const desc = new webrtc.RTCSessionDescription(sdp)
-    await peerConnection.setRemoteDescription(desc)
-    const answer = await peerConnection.createAnswer()
-    await peerConnection.setLocalDescription(answer)
+    peerConnection.onLocalDescription((sdp, type) => {
+        serverConnection.setRemoteDescription(sdp, type)
+    })
+    peerConnection.onLocalCandidate((candidate, mid) => {
+        serverConnection.addRemoteCandidate(candidate, mid)
+    })
 
-    peers.get(id).connection = peerConnection
+    peers.get(id).clientConnection = peerConnection
+    peers.get(id).serverConnection = serverConnection
 
     const payload = {
         id: id,
-        sdp: peerConnection.localDescription
+        sdp: serverConnection.localDescription
     }
     socket.send(JSON.stringify(payload))
     logger.log({ level: "info", message: "Sent response to 'connect' event, emitted_event_type = 'answer', payload hidden" })
@@ -177,12 +198,13 @@ const handleTrackEvent = (event, id, broadcast) => {
     }
 }
 
-const createPeerConnection = () => {
-    return new RTCPeerConnection({
-        iceServers: [
-            {'urls': 'stun:stun.l.google.com:19302'}
-        ]
-    })
+const createPeerConnection = (id) => {
+    return new nodeDataChannel.PeerConnection(
+        `peer_${id}`,
+        { iceServers:
+                ['stun:stun.l.google.com:19302']
+        }
+    )
 }
 
 module.exports = { peers, socketOnConnect, socketOnClose, socketOnMessage }
